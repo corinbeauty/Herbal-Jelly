@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>不老松中清店 - 歸苓膏生產管理</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
+        body { font-family: 'Noto Sans TC', sans-serif; background-color: #f8fafc; margin: 0; padding: 0; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 10px; }
+        .directory-input { background: transparent; border: none; outline: none; width: 100%; text-align: center; font-weight: bold; padding: 4px 0; transition: all 0.2s; }
+        .directory-input:focus { background: white; box-shadow: 0 0 0 2px #f97316; border-radius: 4px; }
+        
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fadeIn { animation: fadeIn 0.3s ease-out forwards; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useMemo, useEffect } = window.React;
+        const firebase = window.firebase;
+        const appId = 'unlaosong-v17';
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAnDSWvDCH1YyvmG9tnmdmtduOOxnbDHos",
+            authDomain: "master-schdule.firebaseapp.com",
+            projectId: "master-schdule",
+            storageBucket: "master-schdule.firebasestorage.app",
+            messagingSenderId: "916703230059",
+            appId: "1:916703230059:web:1229143df631cf9f32192e"
+        };
+
+        if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        const App = () => {
+            const [user, setUser] = useState(null);
+            const [records, setRecords] = useState([]);
+            const [isSyncing, setIsSyncing] = useState(true);
+            
+            const [newProd, setNewProd] = useState({ 
+                date: new Date().toISOString().split('T')[0], 
+                pack: "", water: "", bowls: "", producer: "", notes: "" 
+            });
+
+            useEffect(() => {
+                auth.signInAnonymously().catch(console.error);
+                const unsubscribeAuth = auth.onAuthStateChanged(setUser);
+                return () => unsubscribeAuth();
+            }, []);
+
+            useEffect(() => {
+                if (!user) return;
+                const unsub = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('productionRecords')
+                    .onSnapshot((snap) => {
+                        const list = [];
+                        snap.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
+                        setRecords(list.sort((a,b) => b.date.localeCompare(a.date)));
+                        setIsSyncing(false);
+                    });
+                return () => unsub();
+            }, [user]);
+
+            const addRecord = async () => {
+                if (!newProd.date || !newProd.pack || !newProd.bowls) {
+                    return;
+                }
+                setIsSyncing(true);
+                await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('productionRecords').add({
+                    ...newProd,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                setNewProd({ date: new Date().toISOString().split('T')[0], pack: "", water: "", bowls: "", producer: "", notes: "" });
+            };
+
+            const updateField = (id, field, value) => {
+                db.collection('artifacts').doc(appId).collection('public').doc('data').collection('productionRecords').doc(id).update({
+                    [field]: value,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+            };
+
+            const deleteRecord = (id) => {
+                if (window.confirm("確定要刪除這筆生產記錄嗎？")) {
+                    db.collection('artifacts').doc(appId).collection('public').doc('data').collection('productionRecords').doc(id).delete();
+                }
+            };
+
+            const totals = useMemo(() => {
+                return records.reduce((acc, cur) => {
+                    acc.packs += (Number(cur.pack) || 0);
+                    acc.bowls += (Number(cur.bowls) || 0);
+                    return acc;
+                }, { packs: 0, bowls: 0 });
+            }, [records]);
+
+            return (
+                <div className="max-w-5xl mx-auto p-4 md:p-8 min-h-screen">
+                    {}
+                    <header className="flex justify-between items-center mb-8 border-b-2 border-orange-500 pb-4">
+                        <div className="flex items-center gap-3">
+                            <h1 className="text-2xl font-black text-slate-800 tracking-tighter uppercase italic">歸苓膏生產管理系統</h1>
+                        </div>
+                        <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-full border shadow-sm">
+                            <span className={isSyncing ? 'animate-pulse text-orange-400' : 'text-green-500'}>
+                                {isSyncing ? '● 同步中' : '● 雲端連線正常'}
+                            </span>
+                        </div>
+                    </header>
+
+                    {}
+                    <div className="bg-white p-6 rounded-2xl border shadow-sm mb-6 animate-fadeIn">
+                        <h2 className="text-sm font-black text-orange-600 mb-4 tracking-widest uppercase flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 bg-orange-500 rounded-full"></span> 建立新生產記錄
+                        </h2>
+                        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+                            <div className="flex flex-col gap-1">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">製作日期</label>
+                                <input type="date" value={newProd.date} onChange={e=>setNewProd({...newProd, date: e.target.value})} className="border-2 border-slate-100 p-2 rounded-xl text-sm font-black outline-none focus:border-orange-500 transition-colors" />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">原液使用/包</label>
+                                <input type="number" value={newProd.pack} onChange={e=>setNewProd({...newProd, pack: e.target.value})} placeholder="包數" className="border-2 border-slate-100 p-2 rounded-xl text-sm font-black outline-none focus:border-orange-500 transition-colors" />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">水量/c.c.</label>
+                                <input type="number" value={newProd.water} onChange={e=>setNewProd({...newProd, water: e.target.value})} placeholder="c.c." className="border-2 border-slate-100 p-2 rounded-xl text-sm font-black outline-none focus:border-orange-500 transition-colors" />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">成品數量/碗</label>
+                                <input type="number" value={newProd.bowls} onChange={e=>setNewProd({...newProd, bowls: e.target.value})} placeholder="碗數" className="border-2 border-slate-100 p-2 rounded-xl text-sm font-black outline-none focus:border-orange-500 transition-colors" />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">製作人</label>
+                                <input value={newProd.producer} onChange={e=>setNewProd({...newProd, producer: e.target.value})} placeholder="姓名" className="border-2 border-slate-100 p-2 rounded-xl text-sm font-black outline-none focus:border-orange-500 transition-colors" />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">備註</label>
+                                <input value={newProd.notes} onChange={e=>setNewProd({...newProd, notes: e.target.value})} placeholder="..." className="border-2 border-slate-100 p-2 rounded-xl text-sm font-black outline-none focus:border-orange-500 transition-colors" />
+                            </div>
+                        </div>
+                        <button onClick={addRecord} className="mt-6 w-full bg-slate-900 text-white py-3 rounded-xl font-black text-sm shadow-xl hover:bg-black active:scale-[0.98] transition-all uppercase tracking-widest">確認新增至雲端</button>
+                    </div>
+
+                    {}
+                    <div className="bg-white border-2 border-slate-900 rounded-2xl shadow-2xl overflow-hidden flex flex-col min-h-[500px] animate-fadeIn">
+                        <div className="bg-slate-900 p-3 text-center font-black text-white text-xs tracking-[0.2em] uppercase flex justify-between px-6">
+                            <span>歷史生產清單 (直接修改數據即可儲存)</span>
+                            <span className="text-orange-400">開放編輯模式</span>
+                        </div>
+                        <div className="overflow-y-auto flex-1 custom-scrollbar">
+                            <table className="w-full text-xs text-center border-collapse">
+                                <thead className="sticky top-0 bg-slate-100 z-10 border-b border-slate-900">
+                                    <tr className="font-black text-slate-500 uppercase tracking-tighter">
+                                        <th className="py-4 px-2 border-r border-slate-200">製作日期</th>
+                                        <th className="py-4 px-2 border-r border-slate-200">原液(包)</th>
+                                        <th className="py-4 px-2 border-r border-slate-200">水量(c.c.)</th>
+                                        <th className="py-4 px-2 border-r border-slate-200 text-orange-600">成品(碗)</th>
+                                        <th className="py-4 px-2 border-r border-slate-200">製作人</th>
+                                        <th className="py-4 px-2 border-r border-slate-200 text-left">備註 (可編輯)</th>
+                                        <th className="py-4 px-2 w-12 text-red-500">刪除</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 font-bold">
+                                    {records.length === 0 ? (
+                                        <tr><td colSpan="7" className="py-20 text-slate-300 font-black italic text-lg">目前尚無生產記錄</td></tr>
+                                    ) : (
+                                        records.map(r => (
+                                            <tr key={r.id} className="hover:bg-orange-50 transition-colors group">
+                                                <td className="py-3 font-mono font-black border-r border-slate-50">{r.date}</td>
+                                                <td className="border-r border-slate-50"><input className="directory-input" value={r.pack} onChange={e=>updateField(r.id, 'pack', e.target.value)} /></td>
+                                                <td className="border-r border-slate-50"><input className="directory-input" value={r.water} onChange={e=>updateField(r.id, 'water', e.target.value)} /></td>
+                                                <td className="border-r border-slate-50"><input className="directory-input font-black text-orange-600 text-sm" value={r.bowls} onChange={e=>updateField(r.id, 'bowls', e.target.value)} /></td>
+                                                <td className="border-r border-slate-50"><input className="directory-input" value={r.producer} onChange={e=>updateField(r.id, 'producer', e.target.value)} /></td>
+                                                <td className="text-left px-3"><input className="w-full bg-transparent outline-none italic text-slate-500 text-[11px]" value={r.notes} onChange={e=>updateField(r.id, 'notes', e.target.value)} placeholder="-" /></td>
+                                                <td className="py-3">
+                                                    <button onClick={() => deleteRecord(r.id)} className="text-slate-300 hover:text-red-600 transition-colors">✕</button>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        {}
+                        <div className="bg-slate-100 p-4 border-t-2 border-slate-900 flex flex-wrap justify-between px-8 text-xs font-black uppercase tracking-widest shadow-inner">
+                            <div className="flex gap-8 items-center">
+                                <span className="flex items-center gap-2">總記錄數: <span className="bg-slate-800 text-white px-2 py-0.5 rounded-md">{records.length}</span></span>
+                                <span className="border-l border-slate-300 pl-8 flex items-center gap-2">累計原液: <span className="bg-slate-800 text-white px-2 py-0.5 rounded-md">{totals.packs}</span> 包</span>
+                            </div>
+                            <div className="text-orange-600 text-lg underline underline-offset-4 decoration-2">成品總累計: {totals.bowls} 碗</div>
+                        </div>
+                    </div>
+                    
+                    <footer className="mt-8 text-center text-[10px] text-slate-400 font-black uppercase tracking-[0.3em]">
+                        © 原點數位科技 - 歸苓膏生產雲端管理模組
+                    </footer>
+                </div>
+            );
+        };
+
+        const root = window.ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
